@@ -688,7 +688,7 @@ const I18N = {
     fitScene: 'Vừa cảnh', camTip: 'Chuột phải + kéo để xoay camera, Shift + chuột phải để dời cảnh, lăn chuột để phóng to.',
     secFloor: 'Sàn & ánh sáng', showFloorGrid: 'Hiện lưới sàn', gridStepMm: 'Ô lưới (mm)', gridExtent: 'Phạm vi lưới (mm)', exportGrid: 'Xuất kèm lưới sàn', shading: 'Đổ bóng',
     secEditor: 'Trình chỉnh sửa', snapOnLbl: 'Bắt dính', step2d: 'Bước lưới 2D (px)', step3d: 'Bước di chuyển 3D (mm)', showGridLbl: 'Hiện lưới',
-    tips3d: '<b>Mẹo</b><ul><li>Chuột phải + kéo: xoay camera · Shift + chuột phải: dời cảnh · lăn chuột: phóng to</li><li>Phím <kbd>1</kbd>–<kbd>5</kbd>: Chọn, Di chuyển, Co giãn, Xoay, Nối dây</li><li><kbd>[</kbd> <kbd>]</kbd>: xoay camera 15° · <kbd>I</kbd>: góc isometric</li><li>Giữ <kbd>Shift</kbd> khi kéo vật: nâng lên / hạ xuống</li></ul>',
+    tips3d: '<b>Mẹo</b><ul><li>Chuột phải + kéo: xoay camera · Shift + chuột phải: dời cảnh · lăn chuột: phóng to</li><li>Phím <kbd>1</kbd>–<kbd>5</kbd>: Chọn, Di chuyển, Co giãn, Xoay, Nối dây</li><li><kbd>[</kbd> <kbd>]</kbd>: xoay camera 15° · <kbd>I</kbd>: góc isometric</li><li>Kéo vật lên mặt trên của khối khác: tự đặt lên trên (giữ <kbd>Alt</kbd> để kéo tự do)</li><li>Giữ <kbd>Shift</kbd> khi kéo vật: nâng lên / hạ xuống</li></ul>',
     tips2d: '<b>Mẹo</b><ul><li>Nhấp đúp vào hình để gõ chữ</li><li>Công cụ <b>Nối dây</b> (phím <kbd>5</kbd>): bấm khối này rồi khối kia để tạo mũi tên</li><li>Kéo đầu mũi tên vào khối để gắn — khối di chuyển thì mũi tên đi theo</li><li><kbd>Alt</kbd> khi kéo: tạm tắt bắt dính</li></ul>',
     removePoint: 'Xoá điểm', addPoint: 'Thêm điểm', points: 'Các điểm', relToPos: 'so với vị trí',
     arrayDup: 'Nhân bản hàng loạt', count: 'Số bản', stepMm: 'Khoảng cách (mm)', stepPx: 'Khoảng cách (px)', makeCopies: 'Tạo bản sao',
@@ -878,7 +878,7 @@ const I18N = {
     fitScene: 'Fit scene', camTip: 'Right-drag to orbit, Shift + right-drag to pan the scene, mouse wheel to zoom.',
     secFloor: 'Floor & light', showFloorGrid: 'Show floor grid', gridStepMm: 'Grid step (mm)', gridExtent: 'Grid extent (mm)', exportGrid: 'Include grid in export', shading: 'Shading',
     secEditor: 'Editor', snapOnLbl: 'Snap', step2d: '2D grid step (px)', step3d: '3D move step (mm)', showGridLbl: 'Show grid',
-    tips3d: '<b>Tips</b><ul><li>Right-drag: orbit · Shift + right-drag: pan the scene · wheel: zoom</li><li>Keys <kbd>1</kbd>–<kbd>5</kbd>: Select, Move, Scale, Rotate, Wire</li><li><kbd>[</kbd> <kbd>]</kbd>: orbit 15° · <kbd>I</kbd>: isometric view</li><li>Hold <kbd>Shift</kbd> while dragging an object: raise / lower it</li></ul>',
+    tips3d: '<b>Tips</b><ul><li>Right-drag: orbit · Shift + right-drag: pan the scene · wheel: zoom</li><li>Keys <kbd>1</kbd>–<kbd>5</kbd>: Select, Move, Scale, Rotate, Wire</li><li><kbd>[</kbd> <kbd>]</kbd>: orbit 15° · <kbd>I</kbd>: isometric view</li><li>Drag a part onto the top of another object and it sits on it (hold <kbd>Alt</kbd> to drag freely)</li><li>Hold <kbd>Shift</kbd> while dragging an object: raise / lower it</li></ul>',
     tips2d: '<b>Tips</b><ul><li>Double-click a shape to type in it</li><li><b>Wire</b> tool (key <kbd>5</kbd>): click one shape, then another, to draw an arrow</li><li>Drag an arrow end onto a shape to attach it — the arrow follows when the shape moves</li><li><kbd>Alt</kbd> while dragging: bypass snapping</li></ul>',
     removePoint: 'Remove point', addPoint: 'Add point', points: 'Points', relToPos: 'relative to position',
     arrayDup: 'Array copies', count: 'Count', stepMm: 'Step (mm)', stepPx: 'Step (px)', makeCopies: 'Make copies',
@@ -3614,8 +3614,41 @@ function startMove(p, e, clickedId) {
     d.vn = v3.len(hz) > 0.05 ? v3.norm(hz) : B.G;
     d.w0 = unproj(B, p.x, p.y, d.hn, d.c);
     d.v0 = unproj(B, p.x, p.y, d.vn, d.c);
+    d.skip = new Set(obs.map(o => o.id));
+    d.a0 = a;
+    d.surf = !!a && obs.some(o => !['wire', 'guide'].includes(o.type));
+    d.rest = d.surf && Math.abs(a.min[2] - surfaceBelow(pg, a, d.skip)) < 0.6;
   }
   S.drag = d;
+}
+const NO_REST = ['wire', 'guide', 'text3d'];
+function surfaceBelow(pg, a, skip) {
+  let base = 0;
+  for (const q of pg.objects || []) {
+    if (skip.has(q.id) || q.hidden || NO_REST.includes(q.type)) continue;
+    for (const s of objSolids(q, pg.objects)) {
+      if (s.kind === 'tag' || s.kind === 'poly') continue;
+      const b = aabbOf(solidPts(s));
+      const xy = a.min[0] < b.max[0] - 0.01 && b.min[0] < a.max[0] - 0.01 && a.min[1] < b.max[1] - 0.01 && b.min[1] < a.max[1] - 0.01;
+      if (xy && b.max[2] <= a.min[2] + 0.5 && b.max[2] > base) base = b.max[2];
+    }
+  }
+  return base;
+}
+function topFaceAt(cx, cy, skip) {
+  for (const el of document.elementsFromPoint(cx, cy)) {
+    if (!CONTENT.contains(el)) continue;
+    const g = el.closest('[data-oid]');
+    if (!g) continue;
+    const id = g.getAttribute('data-oid');
+    if (skip.has(id)) continue;
+    const o = findObj(id);
+    if (!o || NO_REST.includes(o.type)) continue;
+    const fEl = el.closest('[data-f]'), f = fEl ? S.reg.faces[fEl.getAttribute('data-f')] : null;
+    if (!f) return null;
+    return f.n[2] > 0.7 ? f : null;
+  }
+  return null;
 }
 
 function startHandle(code, p, e) {
@@ -3728,6 +3761,20 @@ function doMove(d, p, e) {
     if (delta) {
       const st = snapOn(e) ? step3() : 0;
       delta = delta.map(v => snapTo(v, st));
+      if (!e.shiftKey && d.surf && snapOn(e)) {
+        const f = topFaceAt(e.clientX, e.clientY, d.skip);
+        let base = null;
+        if (f) {
+          base = f.p[2];
+          const w = unproj(d.B, p.x, p.y, [0, 0, 1], [0, 0, base + (d.c[2] - d.a0.min[2])]);
+          if (w && d.w0) { delta[0] = snapTo(w[0] - d.w0[0], st); delta[1] = snapTo(w[1] - d.w0[1], st); }
+        }
+        else if (d.rest) {
+          const a = { min: [d.a0.min[0] + delta[0], d.a0.min[1] + delta[1], d.a0.min[2]], max: [d.a0.max[0] + delta[0], d.a0.max[1] + delta[1], d.a0.max[2]] };
+          base = surfaceBelow(page(), a, d.skip);
+        }
+        if (base != null) delta[2] = base - d.a0.min[2];
+      }
       for (const m of d.objs) { const o = findObj(m.id); if (o) o.pos = [r2(m.pos[0] + delta[0]), r2(m.pos[1] + delta[1]), r2(m.pos[2] + delta[2])]; }
       S.status = `Δ X ${r1(delta[0])}  Y ${r1(delta[1])}  Z ${r1(delta[2])} mm`;
     }
